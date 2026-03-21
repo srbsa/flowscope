@@ -1,0 +1,48 @@
+# ── Secrets ───────────────────────────────────────────────────────────────────
+.env
+
+# ── Python ────────────────────────────────────────────────────────────────────
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Runtime outputs ───────────────────────────────────────────────────────────
+# All pipeline run folders (contain user video analysis — never commit)
+state_outputs/run_*/
+# But keep the placeholder so the directory is tracked
+!state_outputs/.gitkeep
+
+# Dev artefacts from local runs
+e2e_run.log
+e2e_run_dir.txt
+e2e_status.txt
+e2e_stdout.log
+nohup.out
+
+# ── User video files ──────────────────────────────────────────────────────────
+# Never commit video files — they may contain proprietary business content
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.wav
+
+# ── Test assets ───────────────────────────────────────────────────────────────
+# Test video is not committed — add your own in tests/video/ locally
+tests/video/
+
+# ── OS / IDE ──────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
