@@ -13,6 +13,7 @@ MAX_ALIGNMENT_ITERATIONS = 3
 FRAME_DIFF_THRESHOLD = 30          # Mean pixel diff to consider frame "unique"
 MOUSE_REGION_SIZE = 100            # px² region to ignore as mouse movement
 VIDEO_MAX_WIDTH = int(os.getenv("VIDEO_MAX_WIDTH", "480"))  # 0 = no downscale
+MAX_FRAMES_DESCRIBED = int(os.getenv("MAX_FRAMES_DESCRIBED", "100"))  # max frames sent to vision LLM
 STATE_OUTPUTS_DIR = "state_outputs"
 
 # Provider constants

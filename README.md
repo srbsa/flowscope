@@ -237,6 +237,7 @@ echo "$OUTPUT_FULL"  # full report text
 | `FRAME_DIFF_THRESHOLD` | `30` | Pixel diff threshold for keyframe detection (0–255) |
 | `MOUSE_REGION_SIZE` | `100` | Bounding box (px) to ignore as cursor movement |
 | `VIDEO_MAX_WIDTH` | `480` | Downscale video width before processing (0 = off) |
+| `MAX_FRAMES_DESCRIBED` | `100` | Max keyframes sent to the vision LLM for description |
 
 ---
 
@@ -301,7 +302,7 @@ state_outputs/                  ← Runtime run folders (gitignored)
 ## Limitations
 
 - **Local models (9B):** Thinking models like Qwen3-8B are capable but can truncate outputs on very long context. FlowScope works around this by disabling thinking mode for synthesis and capping research rounds.
-- **Frame limit:** Only the first 20 frames are described via vision (cost/latency control). Adjust in `nodes.py` if you need more.
+- **Frame limit:** By default the first 100 keyframes are described via vision (cost/latency control). Override with `MAX_FRAMES_DESCRIBED` in `.env`. The Streamlit UI previews only the first 20 thumbnails regardless of this setting.
 - **Video length:** Very long videos (>30 min) may produce transcripts that exceed the model context window. Split long recordings if needed.
 
 ---

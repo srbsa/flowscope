@@ -17,6 +17,7 @@ from graph.state import (
     AGENT_RESEARCH,
     AGENT_ALIGNMENT,
     AGENT_SYNTHESIS,
+    MAX_FRAMES_DESCRIBED,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,7 +58,7 @@ def _describe_frames(frame_paths: List[str], provider: str) -> List[str]:
     model = get_model(provider, vision=True)
     descriptions: list[str] = []
 
-    for i, path in enumerate(frame_paths[:20]):
+    for i, path in enumerate(frame_paths[:MAX_FRAMES_DESCRIBED]):
         try:
             with open(path, "rb") as f:
                 img_b64 = base64.b64encode(f.read()).decode("utf-8")
@@ -95,8 +96,8 @@ def _describe_frames(frame_paths: List[str], provider: str) -> List[str]:
             logger.warning("Frame description failed for %s: %s", path, exc)
             descriptions.append(f"(frame: {path.split('/')[-1]})")
 
-    if len(frame_paths) > 20:
-        descriptions += [f"(frame {i+21})" for i in range(len(frame_paths) - 20)]
+    if len(frame_paths) > MAX_FRAMES_DESCRIBED:
+        descriptions += [f"(frame {i+MAX_FRAMES_DESCRIBED+1})" for i in range(len(frame_paths) - MAX_FRAMES_DESCRIBED)]
 
     return descriptions
 
