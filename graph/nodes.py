@@ -18,7 +18,9 @@ from graph.state import (
     AGENT_ALIGNMENT,
     AGENT_SYNTHESIS,
     MAX_FRAMES_DESCRIBED,
+    STATUS_COMPLETE,
 )
+from utils.state_manager import write_agent_state
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +42,24 @@ FRAME_VISION_CHAIN = (
     "What changed? What new action, screen, or content is now visible? "
     "If the tool/product is identifiable, name it. One sentence."
 )
+
+# ── Helper: chunk-summarise frame descriptions ──────────────────────────────────
+FRAME_CHUNK_SIZE = 25
+
+CHUNK_SUMMARY_SYSTEM = """\
+You are a workflow analyst. You have been given a sequence of consecutive screen
+recording frame descriptions from a business workflow walkthrough.
+Produce a nuanced, flowing narrative summary (3–5 sentences) of what the user
+was doing during this segment. Focus on: the workflow actions performed,
+tools or interfaces used, any friction or inefficiency visible, and how this
+segment connects to the broader workflow. Be specific and observational."""
+
+CHUNK_SUMMARY_USER = """\
+Frame segment {start}–{end} of {total} total frames:
+{descriptions}
+
+Summarise what was happening during this workflow segment. Describe the actions,
+tools, and any friction or inefficiency visible."""
 
 
 def _describe_frames(frame_paths: List[str], provider: str) -> List[str]:
@@ -102,6 +122,50 @@ def _describe_frames(frame_paths: List[str], provider: str) -> List[str]:
     return descriptions
 
 
+def _summarise_chunks(descriptions: List[str], provider: str) -> List[str]:
+    """
+    Group frame descriptions into chunks of FRAME_CHUNK_SIZE and summarise
+    each group with a focused LLM call, producing a nuanced narrative per chunk.
+    Returns a list of paragraph summaries, one per chunk.
+    Falls back to a joined description list on error.
+    """
+    from utils.llm_client import chat
+
+    if not descriptions:
+        return []
+
+    summaries: list[str] = []
+    total = len(descriptions)
+
+    for start_idx in range(0, total, FRAME_CHUNK_SIZE):
+        chunk = descriptions[start_idx: start_idx + FRAME_CHUNK_SIZE]
+        start_label = start_idx + 1
+        end_label = min(start_idx + FRAME_CHUNK_SIZE, total)
+        numbered = "\n".join(f"{start_label + j}. {d}" for j, d in enumerate(chunk))
+
+        try:
+            summary = chat(
+                provider=provider,
+                messages=[{
+                    "role": "user",
+                    "content": CHUNK_SUMMARY_USER.format(
+                        start=start_label,
+                        end=end_label,
+                        total=total,
+                        descriptions=numbered,
+                    ),
+                }],
+                system=CHUNK_SUMMARY_SYSTEM,
+                max_tokens=400,
+            )
+            summaries.append(f"**Frames {start_label}–{end_label}:** {summary.strip()}")
+        except Exception as exc:
+            logger.warning("Chunk summary failed for frames %d–%d: %s", start_label, end_label, exc)
+            summaries.append(f"**Frames {start_label}–{end_label}:** " + "; ".join(chunk))
+
+    return summaries
+
+
 # ── Node 1: Transcribe ─────────────────────────────────────────────────────────
 
 def transcribe_node(state: WorkflowState) -> dict:
@@ -123,7 +187,7 @@ def transcribe_node(state: WorkflowState) -> dict:
 # ── Node 2: Extract Frames ─────────────────────────────────────────────────────
 
 def extract_frames_node(state: WorkflowState) -> dict:
-    """Extract unique keyframes from video and describe them with vision."""
+    """Extract unique keyframes from video, describe them with vision, and chunk-summarise."""
     from agents.frame_extractor import extract_keyframes
     logger.info("NODE: extract_frames")
 
@@ -132,10 +196,40 @@ def extract_frames_node(state: WorkflowState) -> dict:
         run_dir=state.get("run_dir"),
     )
     frame_descriptions = _describe_frames(frame_paths, state.get("provider", ""))
+    frame_chunk_summaries = _summarise_chunks(frame_descriptions, state.get("provider", ""))
+
+    # Persist both individual descriptions and chunk summaries to frame_extractor/output.md
+    chunk_section = (
+        "\n\n".join(frame_chunk_summaries)
+        if frame_chunk_summaries else "_No frames extracted._"
+    )
+    desc_section = (
+        "\n".join(f"{i + 1}. {d}" for i, d in enumerate(frame_descriptions))
+        if frame_descriptions else "_No frame descriptions available._"
+    )
+    output_full = (
+        "## Chunk Summaries (every 25 frames)\n\n"
+        f"{chunk_section}\n\n"
+        "---\n\n"
+        "## Frame-by-Frame Descriptions\n\n"
+        f"{desc_section}"
+    )
+    summary_line = (
+        f"{len(frame_paths)} keyframes extracted, "
+        f"{len(frame_chunk_summaries)} chunk "
+        f"{'summary' if len(frame_chunk_summaries) == 1 else 'summaries'} generated"
+    )
+    write_agent_state(
+        AGENT_FRAME_EXTRACTOR, STATUS_COMPLETE,
+        output_full=output_full,
+        output_summary=summary_line,
+        run_dir=state.get("run_dir"),
+    )
 
     return {
         "frame_paths": frame_paths,
         "frame_descriptions": frame_descriptions,
+        "frame_chunk_summaries": frame_chunk_summaries,
         "current_step": AGENT_REQUIREMENTS,
     }
 
@@ -143,13 +237,13 @@ def extract_frames_node(state: WorkflowState) -> dict:
 # ── Node 3: Requirements ───────────────────────────────────────────────────────
 
 def requirements_node(state: WorkflowState) -> dict:
-    """Distill transcript + frames into structured requirements."""
+    """Distill transcript + frame chunk summaries into structured requirements."""
     from agents.requirements_agent import run_requirements_agent
     logger.info("NODE: requirements")
 
     requirements = run_requirements_agent(
         transcript=state["transcript"],
-        frame_descriptions=state["frame_descriptions"],
+        frame_chunk_summaries=state.get("frame_chunk_summaries", []),
         provider=state.get("provider", ""),
         run_dir=state.get("run_dir"),
     )

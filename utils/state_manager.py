@@ -72,7 +72,7 @@ def _md_path(agent: str, run_dir: str | None = None) -> Path:
 
 
 # Agents whose full output is worth rendering as standalone markdown
-_MD_AGENTS = {"requirements", "research", "alignment", "synthesis"}
+_MD_AGENTS = {"frame_extractor", "requirements", "research", "alignment", "synthesis"}
 
 
 # Agents that loop — iteration number is meaningful in their .md heading

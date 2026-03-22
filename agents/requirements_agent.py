@@ -72,8 +72,8 @@ USER_PROMPT_TEMPLATE = """\
 ## Transcript of Workflow Video
 {transcript}
 
-## Visual Keyframe Descriptions
-{frame_descriptions}
+## Visual Frame Summaries (chunked every 25 frames)
+{frame_summaries}
 
 Analyse this workflow deeply. Focus on business goals, bottlenecks, and
 optimisation opportunities — not on describing the tool's features.
@@ -82,18 +82,18 @@ optimisation opportunities — not on describing the tool's features.
 
 def run_requirements_agent(
     transcript: str,
-    frame_descriptions: List[str],
+    frame_chunk_summaries: List[str],
     provider: str = "",
     run_dir: str | None = None,
 ) -> str:
     """
-    Streamline the raw transcript + frame descriptions into a requirements doc.
+    Streamline the raw transcript + frame chunk summaries into a requirements doc.
 
     Args:
-        transcript:         Full Whisper transcript text.
-        frame_descriptions: List of brief descriptions of each extracted keyframe.
-        provider:           LLM provider ('lm_studio' or 'openai').
-        run_dir:            Per-run output directory.
+        transcript:           Full Whisper transcript text.
+        frame_chunk_summaries: Narrative summaries per 25-frame chunk from frame extraction.
+        provider:             LLM provider ('lm_studio' or 'openai').
+        run_dir:              Per-run output directory.
 
     Returns:
         Structured requirements document as a string.
@@ -103,13 +103,14 @@ def run_requirements_agent(
         output_summary="Distilling requirements…", run_dir=run_dir,
     )
 
-    frames_text = "\n".join(
-        f"- Frame {i+1}: {desc}" for i, desc in enumerate(frame_descriptions)
-    ) or "No frame descriptions available."
+    frame_summaries_text = (
+        "\n\n".join(frame_chunk_summaries)
+        if frame_chunk_summaries else "No visual context available."
+    )
 
     user_msg = USER_PROMPT_TEMPLATE.format(
         transcript=transcript or "(no transcript)",
-        frame_descriptions=frames_text,
+        frame_summaries=frame_summaries_text,
     )
 
     try:

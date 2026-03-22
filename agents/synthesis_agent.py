@@ -54,32 +54,21 @@ For each major bottleneck, one paragraph: what it is, why it matters, how much
 it costs the business (time/money/quality).
 
 ## Solution Paths
+Present the most relevant and genuinely viable solution paths for THIS specific
+workflow. Name each path descriptively (e.g. "Automate with n8n", "Migrate to
+Linear", "Build a custom intake agent") — not generically as Path A/B/C/D.
+Include ONLY paths where you have specific, actionable recommendations. For each:
 
-### Path A: Optimise Current Setup
-What can be done with the existing tool/process. Quick wins, configuration
-changes, integrations. Estimated cost and timeline.
-
-### Path B: Automate with No-Code (n8n / Zapier / Make)
-Specific automation workflows that eliminate manual steps. Describe triggers,
-actions, and connections. Estimated cost and timeline.
-
-### Path C: AI-Powered Solution
-Where AI agents, custom GPT actions, or LLM-powered automation could handle
-parts of this workflow. What would the agent do? What's the build effort?
-
-### Path D: Replace / Rebuild
-If the current tool is fundamentally limiting, what's the alternative?
-SaaS replacement or custom internal tool. Cost, timeline, migration risk.
-
-(Include only paths that are genuinely viable — skip any that don't apply.)
+### [Descriptive Path Name]
+What it involves: specific tools, steps, or approaches.
+Estimated cost and timeline. Key trade-offs and risks.
 
 ## Decision Matrix
-| Criteria | Path A | Path B | Path C | Path D |
-| Cost | ... | ... | ... | ... |
-| Time to Value | ... | ... | ... | ... |
-| Impact (1-5) | ... | ... | ... | ... |
-| Risk (1-5) | ... | ... | ... | ... |
-| Maintenance | ... | ... | ... | ... |
+Compare paths across the dimensions most relevant to this workflow. Adapt columns
+to what matters (typically cost, time-to-value, impact, risk, maintenance burden).
+
+| Criteria | [Path 1 Name] | [Path 2 Name] | [Path N Name] |
+| ... | ... | ... | ... |
 
 ## Recommended Path & Quick Wins
 Your #1 recommendation with rationale. Then list 3-5 things they can do THIS WEEK.

@@ -19,31 +19,36 @@ Video Upload
 ┌─────────────────┐
 │ 2. Extract      │  OpenCV extracts unique keyframes (ignores mouse movement)
 │    Frames       │  Each frame is described by a vision LLM with chained context
+│                 │  Descriptions are grouped into 25-frame narrative summaries
 └────────┬────────┘
          ▼
 ┌─────────────────┐
-│ 3. Requirements │  LLM analyses the workflow: identifies business context,
-│    Analyst      │  maps each step, scores bottlenecks (severity 1-5),
-│                 │  and proposes 3-5 solution strategies
+│ 3. Requirements │  LLM analyses the workflow using transcript + 25-frame chunk
+│    Analyst      │  summaries: identifies business context, maps each step,
+│                 │  scores bottlenecks (severity 1-5), proposes strategies
 └────────┬────────┘
          ▼
 ┌─────────────────┐
-│ 4. Researcher   │  Searches the web (Tavily) across 5 paradigms per bottleneck:
-│                 │  Optimise Current │ Alternative SaaS │ No-Code Automation
-│                 │  AI Agent         │ Custom Build
-│                 │  Produces comparison tables with cost/effort/timeline/sources
+│ 4. Researcher   │  Searches the web (Tavily) for the most relevant approaches
+│                 │  for THIS specific workflow. Common types explored where
+│                 │  applicable: Optimise Current │ Alternative SaaS │ No-Code
+│                 │  Automation │ AI Agent │ Custom Build — but not constrained
+│                 │  to these. Produces comparison tables with trade-offs/sources
 └────────┬────────┘
          ▼
 ┌─────────────────┐
-│ 5. Alignment PM │  Reviews research for creative breadth, business alignment,
-│                 │  and actionability. Confident → proceed. Not confident →
-│                 │  sends feedback notes back to Researcher (up to 3 loops)
+│ 5. Alignment PM │  Reviews research for genuine breadth and fit for THIS
+│                 │  workflow, business alignment, and actionability.
+│                 │  Evaluates whether the right approaches were explored (not
+│                 │  whether all 5 paradigms were covered). Confident → proceed.
+│                 │  Not confident → sends feedback back to Researcher (up to 3 loops)
 └────────┬────────┘
          ▼
 ┌─────────────────┐
-│ 6. Synthesis    │  Produces the final Decision-Ready Report:
-│                 │  Path A (Optimise) | Path B (No-Code) | Path C (AI Agent)
-│                 │  Path D (Replace) + Decision Matrix + Roadmap + Quick Wins
+│ 6. Synthesis    │  Produces the final Decision-Ready Report with dynamically
+│                 │  named solution paths tailored to the workflow (e.g.
+│                 │  "Automate with n8n", "Migrate to Linear") + Decision Matrix
+│                 │  with workflow-relevant criteria + Roadmap + Quick Wins
 └─────────────────┘
 ```
 
@@ -195,12 +200,13 @@ state_outputs/
       state.sh                  ← machine-readable state (shell-sourceable)
     frame_extractor/
       state.sh
+      output.md                 ← frame-by-frame descriptions + 25-frame chunk summaries
     requirements/
       state.sh
       output.md                 ← bottleneck analysis, automation opportunities
     research/
       state.sh
-      output.md                 ← multi-paradigm solution research with sources
+      output.md                 ← multi-approach solution research with sources
     alignment/
       state.sh
       output.md                 ← confidence verdict + critique
@@ -238,6 +244,7 @@ echo "$OUTPUT_FULL"  # full report text
 | `MOUSE_REGION_SIZE` | `100` | Bounding box (px) to ignore as cursor movement |
 | `VIDEO_MAX_WIDTH` | `480` | Downscale video width before processing (0 = off) |
 | `MAX_FRAMES_DESCRIBED` | `100` | Max keyframes sent to the vision LLM for description |
+| `FRAME_CHUNK_SIZE` | `25` | Frames per chunk summarisation group |
 
 ---
 
@@ -302,7 +309,7 @@ state_outputs/                  ← Runtime run folders (gitignored)
 ## Limitations
 
 - **Local models (9B):** Thinking models like Qwen3-8B are capable but can truncate outputs on very long context. FlowScope works around this by disabling thinking mode for synthesis and capping research rounds.
-- **Frame limit:** By default the first 100 keyframes are described via vision (cost/latency control). Override with `MAX_FRAMES_DESCRIBED` in `.env`. The Streamlit UI previews only the first 20 thumbnails regardless of this setting.
+- **Frame limit:** By default the first 100 keyframes are described via vision (cost/latency control). Override with `MAX_FRAMES_DESCRIBED` in `.env`. Descriptions are then grouped into 25-frame narrative chunks (`FRAME_CHUNK_SIZE`) before being passed to the requirements agent — this keeps context window usage in check even at the 100-frame limit. The Streamlit UI previews only the first 20 thumbnails regardless of this setting.
 - **Video length:** Very long videos (>30 min) may produce transcripts that exceed the model context window. Split long recordings if needed.
 
 ---

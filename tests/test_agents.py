@@ -17,7 +17,7 @@ class TestRequirementsAgent:
         from agents.requirements_agent import run_requirements_agent
         result = run_requirements_agent(
             transcript="User shows their CRM process",
-            frame_descriptions=["Frame 1: Dashboard view", "Frame 2: Form"],
+            frame_chunk_summaries=["**Frames 1–25:** User navigates CRM dashboard and opens a contact form."],
             provider="lm_studio",
             run_dir=run_dir,
         )
@@ -32,7 +32,7 @@ class TestRequirementsAgent:
 
         from agents.requirements_agent import run_requirements_agent
         run_requirements_agent(
-            transcript="test", frame_descriptions=[],
+            transcript="test", frame_chunk_summaries=[],
             provider="lm_studio", run_dir=run_dir,
         )
 

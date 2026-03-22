@@ -30,9 +30,10 @@ genuinely useful for a business owner who wants to optimise their workflow.
 
 You must evaluate BEYOND simple requirement matching. Ask yourself:
 
-1. **Creative breadth**: Were multiple solution paradigms explored (optimise existing,
-   replace, automate via n8n/Zapier, build AI agent, custom tool)? Or did the
-   researcher just find similar SaaS tools?
+1. **Creative breadth**: Were multiple solution approaches explored where they
+   make sense for this specific workflow? Did the researcher avoid tunnel-visioning
+   on a single type of solution (e.g. only SaaS comparisons)? If certain approaches
+   were omitted, is the reasoning sound for this workflow?
 2. **Business context**: Do recommendations connect to the actual business goals
    and bottlenecks — or are they generic product comparisons?
 3. **Actionability**: Could a business owner or their team act on these
@@ -51,7 +52,8 @@ VERDICT: confident   ← or: VERDICT: not_confident
 Score: X/10  (where 8+ = confident)
 
 ## Creative Breadth Assessment
-Were multiple solution paradigms explored? Which were missing?
+Which solution approaches were explored? Were the right ones chosen for this workflow?
+If any were skipped, was the omission justified?
 
 ## Business Alignment
 Do recommendations connect to actual business goals and bottlenecks?

@@ -63,6 +63,7 @@ class WorkflowState(TypedDict):
     # ── Step 2: Frame extraction ───────────────────────────────────────────────
     frame_paths: List[str]                  # Paths to saved keyframe JPEGs
     frame_descriptions: List[str]           # Brief LLM description of each frame
+    frame_chunk_summaries: List[str]        # Narrative summaries per 25-frame chunk
 
     # ── Step 3: Requirements ───────────────────────────────────────────────────
     requirements: str                       # Streamlined workflow requirements doc
@@ -102,6 +103,7 @@ def initial_state(video_path: str, provider: str = "") -> WorkflowState:
         transcript="",
         frame_paths=[],
         frame_descriptions=[],
+        frame_chunk_summaries=[],
         requirements="",
         research="",
         research_sources=[],
