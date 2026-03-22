@@ -69,13 +69,11 @@ def _describe_frames(frame_paths: List[str], provider: str) -> List[str]:
     Returns a list of one-line descriptions (one per frame).
     Falls back to filename-based labels on error.
     """
-    from utils.llm_client import get_client, get_model
+    from utils.llm_client import describe_image
 
     if not frame_paths:
         return []
 
-    client = get_client(provider)
-    model = get_model(provider, vision=True)
     descriptions: list[str] = []
 
     for i, path in enumerate(frame_paths[:MAX_FRAMES_DESCRIBED]):
@@ -89,27 +87,14 @@ def _describe_frames(frame_paths: List[str], provider: str) -> List[str]:
             else:
                 text_prompt = FRAME_VISION_CHAIN.format(prev=descriptions[-1])
 
-            response = client.chat.completions.create(
-                model=model,
+            desc = describe_image(
+                provider=provider,
+                image_b64=img_b64,
+                text_prompt=text_prompt,
+                system=FRAME_VISION_SYSTEM,
                 max_tokens=150,
-                messages=[
-                    {"role": "system", "content": FRAME_VISION_SYSTEM},
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{img_b64}",
-                                },
-                            },
-                            {"type": "text", "text": text_prompt},
-                        ],
-                    },
-                ],
             )
-            desc = (response.choices[0].message.content or "").strip()
-            # Strip thinking-model tags
+            # Strip thinking-model tags (LM Studio / Qwen3)
             desc = re.sub(r"<think>.*?</think>", "", desc, flags=re.DOTALL).strip()
             descriptions.append(desc)
         except Exception as exc:

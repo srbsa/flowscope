@@ -37,7 +37,7 @@ Video Upload
 └────────┬────────┘
          ▼
 ┌─────────────────┐
-│ 5. Alignment PM │  Reviews research for genuine breadth and fit for THIS
+│ 5. Alignment    │  Reviews research for genuine breadth and fit for THIS
 │                 │  workflow, business alignment, and actionability.
 │                 │  Evaluates whether the right approaches were explored (not
 │                 │  whether all 5 paradigms were covered). Confident → proceed.
@@ -146,10 +146,10 @@ LM_STUDIO_BASE_URL=http://localhost:1234/v1
 LM_STUDIO_MODEL=qwen/qwen3.5-9b
 LM_STUDIO_VISION_MODEL=qwen/qwen3.5-9b
 
-# OpenAI (cloud)
+# OpenAI (cloud) — uses the Responses API (gpt-5+ primary API)
 OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o
-OPENAI_VISION_MODEL=gpt-4o
+OPENAI_MODEL=gpt-5.4
+OPENAI_VISION_MODEL=gpt-5.4
 
 # Tavily web search (free tier available at https://tavily.com)
 TAVILY_API_KEY=tvly-...
@@ -184,7 +184,7 @@ Open http://localhost:8501 in your browser, upload a video, and click **Run Pipe
 1. Get an API key from [platform.openai.com](https://platform.openai.com)
 2. Set `OPENAI_API_KEY=sk-...` in `.env`
 3. Set `DEFAULT_PROVIDER=openai`
-4. Recommended models: `gpt-4o` (text + vision)
+4. Recommended models: `gpt-5.4` (text + vision — accessed via the Responses API)
 
 ---
 
@@ -234,8 +234,8 @@ echo "$OUTPUT_FULL"  # full report text
 | `LM_STUDIO_MODEL` | `qwen/qwen3.5-9b` | Model for text agents |
 | `LM_STUDIO_VISION_MODEL` | `qwen/qwen3.5-9b` | Model for frame descriptions |
 | `OPENAI_API_KEY` | — | Required for OpenAI provider |
-| `OPENAI_MODEL` | `gpt-4o` | OpenAI text model |
-| `OPENAI_VISION_MODEL` | `gpt-4o` | OpenAI vision model |
+| `OPENAI_MODEL` | `gpt-5.4` | OpenAI text model (Responses API) |
+| `OPENAI_VISION_MODEL` | `gpt-5.4` | OpenAI vision model (Responses API) |
 | `TAVILY_API_KEY` | — | Required for research agent web search |
 | `WHISPER_MODEL` | `base` | Whisper model size (larger = more accurate, slower) |
 | `MAX_ALIGNMENT_ITERATIONS` | `3` | Max research→alignment loop retries |

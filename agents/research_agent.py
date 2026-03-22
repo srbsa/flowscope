@@ -155,6 +155,98 @@ def _run_search(query: str, max_results: int = 5) -> str:
 MAX_TOOL_ROUNDS = int(os.environ.get("MAX_RESEARCH_TOOL_ROUNDS", "6"))
 
 
+def _agentic_search_loop_responses(
+    messages: list,
+    provider: str,
+) -> tuple[str, list[str], list[str]]:
+    """
+    Responses API (OpenAI gpt-5+) tool-use loop.
+
+    Uses client.responses.create() with ``previous_response_id`` for stateful
+    multi-turn tool calling. Tool calls are returned as items in response.output
+    with type == "function_call".
+    """
+    client = get_client(provider)
+    model = get_model(provider)
+    sources: list[str] = []
+    queries: list[str] = []
+    final_text = ""
+    rounds = 0
+
+    response = client.responses.create(
+        model=model,
+        instructions=SYSTEM_PROMPT,
+        input=messages,
+        max_output_tokens=16000,
+        temperature=0.7,
+        tools=[WEB_SEARCH_TOOL],
+    )
+
+    while True:
+        # Capture text from this round (may be empty if only tool calls were made)
+        if response.output_text:
+            final_text = response.output_text
+
+        # Detect function_call items in the output
+        tool_calls = [
+            item for item in response.output
+            if getattr(item, "type", None) == "function_call"
+        ]
+
+        if not tool_calls or rounds >= MAX_TOOL_ROUNDS:
+            break
+
+        rounds += 1
+        tool_outputs = []
+        for tc in tool_calls:
+            if tc.name == "web_search":
+                args = json.loads(tc.arguments)
+                query = args.get("query", "")
+                queries.append(query)
+                search_result = _run_search(
+                    query=query,
+                    max_results=args.get("max_results", 5),
+                )
+                for line in search_result.splitlines():
+                    if line.startswith("URL: "):
+                        sources.append(line[5:].strip())
+                tool_outputs.append({
+                    "type": "function_call_output",
+                    "call_id": tc.call_id,
+                    "output": search_result,
+                })
+
+        # Continue the conversation with tool results
+        response = client.responses.create(
+            model=model,
+            previous_response_id=response.id,
+            input=tool_outputs,
+            tools=[WEB_SEARCH_TOOL],
+            max_output_tokens=16000,
+            temperature=0.7,
+        )
+
+    # Force final synthesis if the loop ended without producing text
+    if not final_text:
+        logger.info("Max tool rounds reached (%d) — forcing final synthesis", MAX_TOOL_ROUNDS)
+        response = client.responses.create(
+            model=model,
+            previous_response_id=response.id,
+            input=[{
+                "role": "user",
+                "content": (
+                    "You have completed your research. Now synthesize all findings "
+                    "into the final output format. Do NOT call any more tools."
+                ),
+            }],
+            max_output_tokens=16000,
+            temperature=0.7,
+        )
+        final_text = response.output_text or ""
+
+    return final_text, sources, queries
+
+
 def _agentic_search_loop(
     messages: list,
     provider: str,
@@ -162,7 +254,15 @@ def _agentic_search_loop(
     """
     Run the tool-use loop until the LLM stops calling tools or hits MAX_TOOL_ROUNDS.
     Returns (final_text, all_source_urls, all_search_queries).
+
+    Routes to the Responses API loop for OpenAI provider, and the Chat Completions
+    loop for LM Studio.
     """
+    from utils.llm_client import PROVIDER_OPENAI
+    if provider == PROVIDER_OPENAI:
+        return _agentic_search_loop_responses(messages, provider)
+
+    # ── LM Studio — Chat Completions tool-use loop ─────────────────────────────
     client = get_client(provider)
     model = get_model(provider)
     sources: list[str] = []

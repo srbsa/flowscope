@@ -84,11 +84,23 @@ def transcribe_video(
 
         extract_audio_track(video_path, wav_path)
 
-        if provider == PROVIDER_OPENAI:
+        api_key = os.getenv("OPENAI_API_KEY", "")
+        use_openai = (
+            provider == PROVIDER_OPENAI
+            and bool(api_key)
+            and not api_key.startswith("your_")
+        )
+        if use_openai:
             logger.info("Transcribing via OpenAI Whisper API")
             transcript = _transcribe_openai(wav_path)
         else:
-            logger.info("Transcribing via local Whisper (%s)", WHISPER_MODEL)
+            if provider == PROVIDER_OPENAI:
+                logger.warning(
+                    "OpenAI API key not configured — falling back to local Whisper (%s)",
+                    WHISPER_MODEL,
+                )
+            else:
+                logger.info("Transcribing via local Whisper (%s)", WHISPER_MODEL)
             transcript = _transcribe_local(wav_path)
 
         Path(wav_path).unlink(missing_ok=True)

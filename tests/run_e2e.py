@@ -121,9 +121,16 @@ def main() -> int:
     # ── Output files ────────────────────────────────────────────────────────────
     _print_separator("Output Files")
     for f in sorted(run_dir.iterdir()):
-        if f.is_file():
-            size = f.stat().st_size
-            print(f"  {f.name:30s}  ({size:,} bytes)")
+        if f.is_dir() and f.name != "frames":
+            output_md = f / "output.md"
+            state_sh = f / "state.sh"
+            parts = []
+            if output_md.exists():
+                parts.append(f"output.md {output_md.stat().st_size:,}B")
+            if state_sh.exists():
+                parts.append(f"state.sh {state_sh.stat().st_size:,}B")
+            if parts:
+                print(f"  {f.name + '/':30s}  {', '.join(parts)}")
 
     frames_dir = run_dir / "frames"
     if frames_dir.exists():
@@ -131,13 +138,13 @@ def main() -> int:
         print(f"  frames/                         ({frame_count} keyframes)")
 
     # ── Final report ─────────────────────────────────────────────────────────────
-    synthesis_md = run_dir / "synthesis.md"
+    synthesis_md = run_dir / "synthesis" / "output.md"
     if synthesis_md.exists():
-        _print_separator("Final Report (synthesis.md)")
+        _print_separator("Final Report (synthesis/output.md)")
         print(synthesis_md.read_text(encoding="utf-8"))
     else:
         _print_separator()
-        print("  synthesis.md not found — pipeline may have failed before synthesis.")
+        print("  synthesis/output.md not found — pipeline may have failed before synthesis.")
 
     if errors:
         _print_separator("Errors")
