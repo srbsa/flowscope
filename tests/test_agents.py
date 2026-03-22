@@ -100,11 +100,11 @@ class TestSynthesisAgent:
 class TestResearchAgent:
     @patch("agents.research_agent._agentic_search_loop")
     def test_returns_research_and_sources(self, mock_loop, tmp_path):
-        mock_loop.return_value = ("## Research Summary\nFindings here", ["https://example.com"])
+        mock_loop.return_value = ("## Research Summary\nFindings here", ["https://example.com"], ["n8n workflow automation"])
         run_dir = str(tmp_path / "run")
 
         from agents.research_agent import run_research_agent
-        text, sources = run_research_agent(
+        text, sources, queries = run_research_agent(
             requirements="req",
             provider="lm_studio",
             run_dir=run_dir,
@@ -112,10 +112,11 @@ class TestResearchAgent:
 
         assert "Research Summary" in text
         assert len(sources) == 1
+        assert len(queries) == 1
 
     @patch("agents.research_agent._agentic_search_loop")
     def test_includes_alignment_notes_on_iteration(self, mock_loop, tmp_path):
-        mock_loop.return_value = ("research", [])
+        mock_loop.return_value = ("research", [], [])
         run_dir = str(tmp_path / "run")
 
         from agents.research_agent import run_research_agent

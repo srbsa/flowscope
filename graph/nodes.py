@@ -260,16 +260,19 @@ def research_node(state: WorkflowState) -> dict:
     from agents.research_agent import run_research_agent
     logger.info("NODE: research  (iteration=%d)", state["iteration_count"])
 
-    research, sources = run_research_agent(
+    research, sources, queries = run_research_agent(
         requirements=state["requirements"],
         alignment_notes=state.get("alignment_notes", ""),
         iteration=state["iteration_count"],
         provider=state.get("provider", ""),
         run_dir=state.get("run_dir"),
     )
+    # Accumulate queries across loop iterations
+    prev_queries = state.get("research_search_queries", [])
     return {
         "research": research,
         "research_sources": sources,
+        "research_search_queries": prev_queries + queries,
         "current_step": AGENT_ALIGNMENT,
     }
 

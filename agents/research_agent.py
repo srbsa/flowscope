@@ -13,9 +13,8 @@ import os
 import re
 from typing import List
 
-from tavily import TavilyClient
-
 from utils.llm_client import get_client, get_model
+from utils.search import run_search
 from utils.state_manager import write_agent_state
 from graph.state import (
     AGENT_RESEARCH,
@@ -26,22 +25,7 @@ from graph.state import (
 
 logger = logging.getLogger(__name__)
 
-# Lazily initialised — so tests and imports don't fail when no key is set
-_tavily: TavilyClient | None = None
-
-
-def _get_tavily() -> TavilyClient:
-    """Return a TavilyClient, raising clearly if the API key is absent."""
-    global _tavily
-    if _tavily is None:
-        key = os.environ.get("TAVILY_API_KEY", "")
-        if not key:
-            raise ValueError(
-                "TAVILY_API_KEY is not set. Set it in your .env file. "
-                "Get a free key at https://tavily.com"
-            )
-        _tavily = TavilyClient(api_key=key)
-    return _tavily
+# Lazily initialised Tavily client lives in utils/search.py
 
 # ── Prompts ────────────────────────────────────────────────────────────────────
 
@@ -108,6 +92,17 @@ If applicable, describe specific automation workflows:
 
 ## Open Questions for Stakeholder
 What decisions or context from the business owner would change recommendations?
+
+## Pre-Finalisation Self-Check
+Before returning your output, score yourself on each of these criteria (the reviewing
+strategist will check all six). If any score < 7/10, run one more targeted web_search
+to fill the gap before finalising:
+1. **Approach breadth** — multiple relevant solution types explored (not just SaaS comparisons)
+2. **Business grounding** — every recommendation connects to a specific bottleneck or goal
+3. **Immediate actionability** — a team could start THIS WEEK (specific tool names, exact costs, steps)
+4. **Workflow specificity** — recommendations are tailored to THIS workflow, not generic advice
+5. **Quick wins** — at least 2–3 improvements achievable in < 1 week are explicitly listed
+6. **ROI reasoning** — cost/benefit or time-saving estimates are present, not just feature lists
 """
 
 USER_PROMPT_TEMPLATE = """\
@@ -152,17 +147,9 @@ WEB_SEARCH_TOOL = {
 
 
 def _run_search(query: str, max_results: int = 5) -> str:
-    """Execute a Tavily search and return formatted results."""
-    logger.info("Searching: %s", query)
-    results = _get_tavily().search(query=query, max_results=max_results, search_depth="advanced")
-    formatted = []
-    for r in results.get("results", []):
-        formatted.append(
-            f"**{r.get('title', 'Untitled')}**\n"
-            f"URL: {r.get('url', '')}\n"
-            f"{r.get('content', '')[:400]}\n"
-        )
-    return "\n---\n".join(formatted) or "No results found."
+    """Execute a search and return only the formatted text (for tool-use loop compatibility)."""
+    text, _ = run_search(query, max_results)
+    return text
 
 
 MAX_TOOL_ROUNDS = int(os.environ.get("MAX_RESEARCH_TOOL_ROUNDS", "6"))
@@ -171,14 +158,15 @@ MAX_TOOL_ROUNDS = int(os.environ.get("MAX_RESEARCH_TOOL_ROUNDS", "6"))
 def _agentic_search_loop(
     messages: list,
     provider: str,
-) -> tuple[str, list[str]]:
+) -> tuple[str, list[str], list[str]]:
     """
     Run the tool-use loop until the LLM stops calling tools or hits MAX_TOOL_ROUNDS.
-    Returns (final_text, all_source_urls).
+    Returns (final_text, all_source_urls, all_search_queries).
     """
     client = get_client(provider)
     model = get_model(provider)
     sources: list[str] = []
+    queries: list[str] = []
     final_text = ""
     rounds = 0
 
@@ -210,8 +198,10 @@ def _agentic_search_loop(
         for tc in choice.message.tool_calls:
             if tc.function.name == "web_search":
                 args = json.loads(tc.function.arguments)
+                query = args.get("query", "")
+                queries.append(query)
                 search_result = _run_search(
-                    query=args.get("query", ""),
+                    query=query,
                     max_results=args.get("max_results", 5),
                 )
                 for line in search_result.splitlines():
@@ -241,7 +231,7 @@ def _agentic_search_loop(
         if msg_content:
             final_text = msg_content
 
-    return final_text, sources
+    return final_text, sources, queries
 
 
 def run_research_agent(
@@ -262,7 +252,7 @@ def run_research_agent(
         run_dir:         Per-run output directory.
 
     Returns:
-        (research_text, sources_list)
+        (research_text, sources_list, search_queries)
     """
     write_agent_state(
         AGENT_RESEARCH, STATUS_RUNNING,
@@ -284,7 +274,7 @@ def run_research_agent(
     messages = [{"role": "user", "content": user_msg}]
 
     try:
-        research, sources = _agentic_search_loop(messages, provider)
+        research, sources, queries = _agentic_search_loop(messages, provider)
 
         summary = f"[Iteration {iteration+1}] " + (research.split("\n")[0][:100] if research else "Research complete")
 
@@ -293,8 +283,8 @@ def run_research_agent(
             output_full=research, output_summary=summary,
             iteration=iteration, run_dir=run_dir,
         )
-        logger.info("Research agent complete (%d chars, %d sources)", len(research), len(sources))
-        return research, sources
+        logger.info("Research agent complete (%d chars, %d sources, %d searches)", len(research), len(sources), len(queries))
+        return research, sources, queries
 
     except Exception as exc:
         error_msg = f"Research agent failed: {exc}"

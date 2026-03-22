@@ -14,6 +14,9 @@ FRAME_DIFF_THRESHOLD = 30          # Mean pixel diff to consider frame "unique"
 MOUSE_REGION_SIZE = 100            # px² region to ignore as mouse movement
 VIDEO_MAX_WIDTH = int(os.getenv("VIDEO_MAX_WIDTH", "480"))  # 0 = no downscale
 MAX_FRAMES_DESCRIBED = int(os.getenv("MAX_FRAMES_DESCRIBED", "100"))  # max frames sent to vision LLM
+MAX_ALIGNMENT_SEARCH_ROUNDS = int(os.getenv("MAX_ALIGNMENT_SEARCH_ROUNDS", "3"))
+MAX_SYNTHESIS_SEARCH_ROUNDS = int(os.getenv("MAX_SYNTHESIS_SEARCH_ROUNDS", "3"))
+SYNTHESIS_SEARCH_ENABLED = os.getenv("SYNTHESIS_SEARCH_ENABLED", "false").lower() == "true"
 STATE_OUTPUTS_DIR = "state_outputs"
 
 # Provider constants
@@ -71,6 +74,7 @@ class WorkflowState(TypedDict):
     # ── Step 4: Research (loops) ───────────────────────────────────────────────
     research: str                           # Researcher's recommendations
     research_sources: List[str]             # URLs / citations used
+    research_search_queries: List[str]      # All web search queries executed across iterations
 
     # ── Step 5: Alignment ─────────────────────────────────────────────────────
     alignment_verdict: str                  # "confident" | "not_confident"
@@ -107,6 +111,7 @@ def initial_state(video_path: str, provider: str = "") -> WorkflowState:
         requirements="",
         research="",
         research_sources=[],
+        research_search_queries=[],
         alignment_verdict="",
         alignment_confident=False,
         alignment_notes="",
