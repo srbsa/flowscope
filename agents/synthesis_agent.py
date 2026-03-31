@@ -5,7 +5,6 @@ document by combining all prior pipeline outputs into a unified deliverable.
 """
 
 import logging
-import os
 import re
 
 from utils.llm_client import chat
@@ -16,12 +15,14 @@ from graph.state import (
     STATUS_RUNNING,
     STATUS_COMPLETE,
     STATUS_FAILED,
+    SYNTHESIS_SEARCH_ENABLED,
+    MAX_SYNTHESIS_SEARCH_ROUNDS,
 )
 
 logger = logging.getLogger(__name__)
 
-_SYNTHESIS_SEARCH_ENABLED = os.environ.get("SYNTHESIS_SEARCH_ENABLED", "false").lower() == "true"
-_MAX_SYNTHESIS_SEARCH_ROUNDS = int(os.environ.get("MAX_SYNTHESIS_SEARCH_ROUNDS", "3"))
+_SYNTHESIS_SEARCH_ENABLED = SYNTHESIS_SEARCH_ENABLED
+_MAX_SYNTHESIS_SEARCH_ROUNDS = MAX_SYNTHESIS_SEARCH_ROUNDS
 
 # ── Prompts ────────────────────────────────────────────────────────────────────
 

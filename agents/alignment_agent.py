@@ -8,7 +8,6 @@ that feed back to the researcher on the next loop iteration.
 """
 
 import logging
-import os
 import re
 from typing import Tuple
 
@@ -20,11 +19,12 @@ from graph.state import (
     STATUS_RUNNING,
     STATUS_COMPLETE,
     STATUS_FAILED,
+    MAX_ALIGNMENT_SEARCH_ROUNDS,
 )
 
 logger = logging.getLogger(__name__)
 
-_MAX_SPOT_CHECK_ROUNDS = int(os.environ.get("MAX_ALIGNMENT_SEARCH_ROUNDS", "3"))
+_MAX_SPOT_CHECK_ROUNDS = MAX_ALIGNMENT_SEARCH_ROUNDS
 _SPOT_CHECK_SCORE_THRESHOLD = 7  # Spot-check triggered when score < this
 
 # ── Prompts ────────────────────────────────────────────────────────────────────

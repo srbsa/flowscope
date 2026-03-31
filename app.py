@@ -173,20 +173,46 @@ def render_agent_output(agent: str, label: str) -> None:
         if status == STATUS_WAITING:
             st.info("Waiting to run…")
         elif status == STATUS_RUNNING:
-            with st.spinner("Running…"):
-                st.empty()
+            progress_msg = state_data.get("OUTPUT_SUMMARY", "")
+            if progress_msg:
+                st.info(f"⏳ {progress_msg}")
+            else:
+                st.info("Running…")
         elif status == STATUS_FAILED:
             st.error(state_data.get("OUTPUT_SUMMARY", "Failed"))
         elif status == STATUS_COMPLETE:
-            output = state_data.get("OUTPUT_FULL", "")
             if agent == AGENT_FRAME_EXTRACTOR:
-                _render_frame_gallery(output)
+                _render_frame_extractor_output(run_dir, state_data)
             else:
+                output = state_data.get("OUTPUT_FULL", "")
                 st.markdown(output)
 
             ts = state_data.get("TIMESTAMP", "")
             if ts:
                 st.caption(f"Completed at {ts}")
+
+
+def _render_frame_extractor_output(run_dir: str | None, state_data: dict) -> None:
+    """Render the frame extractor output: thumbnail gallery + chunk summaries."""
+    # Show chunk summaries (markdown written to OUTPUT_FULL)
+    output = state_data.get("OUTPUT_FULL", "")
+    if output:
+        st.markdown(output)
+
+    # Thumbnail gallery scanned directly from the frames/ directory
+    frames_dir = Path(run_dir) / "frames" if run_dir else None
+    if frames_dir and frames_dir.exists():
+        frame_files = sorted(frames_dir.glob("*.jpg"))
+        if frame_files:
+            st.markdown(f"**{len(frame_files)} keyframes saved**")
+            cols = st.columns(4)
+            for i, fp in enumerate(frame_files[:20]):
+                with cols[i % 4]:
+                    st.image(str(fp), caption=f"Frame {i + 1}", use_container_width=True)
+            if len(frame_files) > 20:
+                st.caption(f"… and {len(frame_files) - 20} more frames (showing first 20)")
+        else:
+            st.info("No keyframes extracted.")
 
 
 def _render_frame_gallery(output: str) -> None:

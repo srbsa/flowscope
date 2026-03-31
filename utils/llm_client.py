@@ -18,6 +18,61 @@ from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
+
+# ── Thinking-model helpers ─────────────────────────────────────────────────────
+
+# Patterns that indicate meta-reasoning rather than actual answer content.
+_META_PATTERNS = re.compile(
+    r"^(The user wants|Wait,|Actually,|Looking at|Thinking Process|Let me |Hmm,|"
+    r"I need to |So,? (?:the|I)|OK,? |However,? looking)",
+    re.IGNORECASE,
+)
+
+
+def _extract_conclusion(reasoning: str) -> str:
+    """Best-effort extraction of the actual answer from raw reasoning_content.
+
+    When a thinking-model exhausts max_tokens during reasoning it never writes
+    ``content``, so the fallback returns ``reasoning_content``.  The tail end
+    of that text is most likely to contain the usable answer.  This function:
+
+    1. Splits the text by double-newline into paragraphs.
+    2. Walks backwards, keeping paragraphs that look like real content.
+    3. Returns the last substantial block (>120 chars) that does not start
+       with common meta-reasoning patterns.
+
+    Falls back to the original text (stripped) if nothing better is found.
+    """
+    paragraphs = [p.strip() for p in reasoning.split("\n\n") if p.strip()]
+    if not paragraphs:
+        return reasoning.strip()
+
+    # Walk from end: once we find a substantial paragraph that looks like
+    # real content (not meta), collect it and any contiguous real content
+    # preceding it.
+    conclusion_parts: list[str] = []
+    for para in reversed(paragraphs):
+        if _META_PATTERNS.match(para):
+            # Stop once we hit meta-reasoning going backwards
+            if conclusion_parts:
+                break
+            continue
+        conclusion_parts.append(para)
+        # If we've collected enough content, stop
+        if sum(len(p) for p in conclusion_parts) > 400:
+            break
+
+    if conclusion_parts:
+        conclusion_parts.reverse()
+        result = "\n\n".join(conclusion_parts)
+        if len(result) > 120:
+            return result
+
+    # If extraction failed, return the last 40% of the text as a heuristic
+    cutpoint = max(0, len(reasoning) - int(len(reasoning) * 0.4))
+    tail = reasoning[cutpoint:].strip()
+    return tail if tail else reasoning.strip()
+
 # ── Provider constants ─────────────────────────────────────────────────────────
 
 PROVIDER_LM_STUDIO = "lm_studio"
@@ -29,8 +84,8 @@ _LM_STUDIO_BASE_URL = os.getenv("LM_STUDIO_BASE_URL", "http://localhost:1234/v1"
 _LM_STUDIO_MODEL = os.getenv("LM_STUDIO_MODEL", "qwen/qwen3.5-9b")
 _LM_STUDIO_VISION_MODEL = os.getenv("LM_STUDIO_VISION_MODEL", "qwen/qwen3.5-9b")
 
-_OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.4")
-_OPENAI_VISION_MODEL = os.getenv("OPENAI_VISION_MODEL", "gpt-5.4")
+_OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
+_OPENAI_VISION_MODEL = os.getenv("OPENAI_VISION_MODEL", "gpt-4o")
 
 DEFAULT_PROVIDER = os.getenv("DEFAULT_PROVIDER", PROVIDER_LM_STUDIO)
 
@@ -145,9 +200,10 @@ def chat(
         # Thinking-model fallback: qwen3/QwQ puts the reasoning in reasoning_content
         # and may leave content empty if max_tokens was exhausted during thinking.
         if not content:
-            content = getattr(msg, "reasoning_content", None) or ""
-            if content:
-                logger.debug("Fell back to reasoning_content (%d chars)", len(content))
+            reasoning = getattr(msg, "reasoning_content", None) or ""
+            if reasoning:
+                logger.debug("Fell back to reasoning_content (%d chars)", len(reasoning))
+                content = _extract_conclusion(reasoning)
 
         # Strip <think>...</think> blocks emitted by thinking-mode models (Qwen3, QwQ)
         content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
@@ -159,7 +215,8 @@ def describe_image(
     image_b64: str,
     text_prompt: str,
     system: str = "",
-    max_tokens: int = 150,
+    max_tokens: int = 400,
+    thinking: bool = True,
 ) -> str:
     """
     Send a vision request with an inline base64-encoded image.
@@ -174,6 +231,9 @@ def describe_image(
         text_prompt: Text prompt to accompany the image
         system:      Optional system prompt
         max_tokens:  Max response tokens
+        thinking:    If False, disable extended thinking (LM Studio / Qwen3 only).
+                     Recommended False for simple per-frame descriptions to save
+                     context tokens and avoid empty responses on small budgets.
 
     Returns:
         Model's text description of the image.
@@ -221,11 +281,25 @@ def describe_image(
                 {"type": "text", "text": text_prompt},
             ],
         })
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=max_tokens,
-        )
-        content = (response.choices[0].message.content or "").strip()
+        kwargs: dict = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+        }
+        if not thinking:
+            kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
+
+        response = client.chat.completions.create(**kwargs)
+        msg = response.choices[0].message
+        content = (msg.content or "").strip()
+
+        # Thinking-model fallback: reasoning_content may hold the answer when
+        # max_tokens was exhausted during the <think> phase.
+        if not content:
+            reasoning = (getattr(msg, "reasoning_content", None) or "").strip()
+            if reasoning:
+                logger.debug("describe_image: fell back to reasoning_content (%d chars)", len(reasoning))
+                content = _extract_conclusion(reasoning)
+
         content = re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
         return content

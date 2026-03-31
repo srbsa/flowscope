@@ -14,6 +14,10 @@ FRAME_DIFF_THRESHOLD = 30          # Mean pixel diff to consider frame "unique"
 MOUSE_REGION_SIZE = 100            # px² region to ignore as mouse movement
 VIDEO_MAX_WIDTH = int(os.getenv("VIDEO_MAX_WIDTH", "480"))  # 0 = no downscale
 MAX_FRAMES_DESCRIBED = int(os.getenv("MAX_FRAMES_DESCRIBED", "100"))  # max frames sent to vision LLM
+MAX_KEYFRAMES = int(os.getenv("MAX_KEYFRAMES", "60"))              # hard cap on extracted keyframes
+FRAME_SAMPLE_RATE = int(os.getenv("FRAME_SAMPLE_RATE", "2"))       # process every Nth video frame
+FRAME_DESCRIPTION_WORKERS = int(os.getenv("FRAME_DESCRIPTION_WORKERS", "1"))  # parallel vision workers (1=sequential)
+FRAME_CHUNK_SIZE = int(os.getenv("FRAME_CHUNK_SIZE", "25"))  # frames per chunk summary
 MAX_ALIGNMENT_SEARCH_ROUNDS = int(os.getenv("MAX_ALIGNMENT_SEARCH_ROUNDS", "3"))
 MAX_SYNTHESIS_SEARCH_ROUNDS = int(os.getenv("MAX_SYNTHESIS_SEARCH_ROUNDS", "3"))
 SYNTHESIS_SEARCH_ENABLED = os.getenv("SYNTHESIS_SEARCH_ENABLED", "false").lower() == "true"

@@ -12,7 +12,6 @@ Strategy:
 """
 
 import logging
-import os
 from pathlib import Path
 from typing import List
 
@@ -28,14 +27,18 @@ from graph.state import (
     STATUS_RUNNING,
     STATUS_COMPLETE,
     STATUS_FAILED,
+    MAX_KEYFRAMES,
+    FRAME_SAMPLE_RATE,
 )
 
 logger = logging.getLogger(__name__)
 
-_THRESHOLD   = int(os.getenv("FRAME_DIFF_THRESHOLD", FRAME_DIFF_THRESHOLD))
-_MOUSE_SIZE  = int(os.getenv("MOUSE_REGION_SIZE",    MOUSE_REGION_SIZE))
-_MAX_WIDTH   = int(os.getenv("VIDEO_MAX_WIDTH",      VIDEO_MAX_WIDTH))
-_SAMPLE_RATE = 2   # Process every Nth frame to reduce computation
+# All values are already env-configurable via state.py; aliased here for readability.
+_THRESHOLD     = FRAME_DIFF_THRESHOLD
+_MOUSE_SIZE    = MOUSE_REGION_SIZE
+_MAX_WIDTH     = VIDEO_MAX_WIDTH
+_SAMPLE_RATE   = FRAME_SAMPLE_RATE
+_MAX_KEYFRAMES = MAX_KEYFRAMES
 
 
 def _is_mouse_only_change(diff_mask: np.ndarray) -> bool:
@@ -137,6 +140,14 @@ def extract_keyframes(
             logger.debug("Keyframe saved: %s  (mean diff=%.1f)", path, mean_diff)
 
         cap.release()
+
+        # Apply hard cap: keep first _MAX_KEYFRAMES frames
+        if _MAX_KEYFRAMES > 0 and len(keyframe_paths) > _MAX_KEYFRAMES:
+            logger.info(
+                "Capping keyframes: %d extracted → %d kept (MAX_KEYFRAMES=%d)",
+                len(keyframe_paths), _MAX_KEYFRAMES, _MAX_KEYFRAMES,
+            )
+            keyframe_paths = keyframe_paths[:_MAX_KEYFRAMES]
 
         summary = f"{len(keyframe_paths)} unique frames extracted from {total_frames} total"
         write_agent_state(

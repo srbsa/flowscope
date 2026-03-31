@@ -6,7 +6,7 @@ Node signature: (state: WorkflowState) -> dict  (return only changed keys)
 
 import base64
 import logging
-import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List
 
 from graph.state import (
@@ -18,6 +18,9 @@ from graph.state import (
     AGENT_ALIGNMENT,
     AGENT_SYNTHESIS,
     MAX_FRAMES_DESCRIBED,
+    FRAME_DESCRIPTION_WORKERS,
+    FRAME_CHUNK_SIZE,
+    STATUS_RUNNING,
     STATUS_COMPLETE,
 )
 from utils.state_manager import write_agent_state
@@ -44,7 +47,6 @@ FRAME_VISION_CHAIN = (
 )
 
 # ── Helper: chunk-summarise frame descriptions ──────────────────────────────────
-FRAME_CHUNK_SIZE = 25
 
 CHUNK_SUMMARY_SYSTEM = """\
 You are a workflow analyst. You have been given a sequence of consecutive screen
@@ -62,47 +64,133 @@ Summarise what was happening during this workflow segment. Describe the actions,
 tools, and any friction or inefficiency visible."""
 
 
-def _describe_frames(frame_paths: List[str], provider: str) -> List[str]:
+def _describe_segment(
+    segment: List[tuple[int, str]],
+    provider: str,
+    total_frames: int,
+    run_dir: str | None,
+) -> List[tuple[int, str]]:
     """
-    Describe each keyframe using vision, chaining previous descriptions
-    so the model understands sequential context.
-    Returns a list of one-line descriptions (one per frame).
-    Falls back to filename-based labels on error.
+    Describe a contiguous segment of frames sequentially with chained context.
+    Each segment starts its own chain (first frame uses FRAME_VISION_FIRST).
+    Returns list of (original_index, description) tuples.
+    Progress updates are written to the state file every 5 frames.
     """
     from utils.llm_client import describe_image
 
-    if not frame_paths:
-        return []
+    results: list[tuple[int, str]] = []
+    prev_desc: str = ""
 
-    descriptions: list[str] = []
-
-    for i, path in enumerate(frame_paths[:MAX_FRAMES_DESCRIBED]):
+    for position, (orig_idx, path) in enumerate(segment):
         try:
             with open(path, "rb") as f:
                 img_b64 = base64.b64encode(f.read()).decode("utf-8")
 
-            # Build the text prompt (chain previous frame context)
-            if i == 0 or not descriptions:
+            # Chain within segment; first frame of each segment is treated as fresh
+            if position == 0 or not prev_desc:
                 text_prompt = FRAME_VISION_FIRST
             else:
-                text_prompt = FRAME_VISION_CHAIN.format(prev=descriptions[-1])
+                text_prompt = FRAME_VISION_CHAIN.format(prev=prev_desc)
 
             desc = describe_image(
                 provider=provider,
                 image_b64=img_b64,
                 text_prompt=text_prompt,
                 system=FRAME_VISION_SYSTEM,
-                max_tokens=150,
+                max_tokens=400,
+                thinking=False,  # thinking disabled: 1-sentence task consumes entire
+                                 # budget during <think> phase, leaving empty content
             )
-            # Strip thinking-model tags (LM Studio / Qwen3)
-            desc = re.sub(r"<think>.*?</think>", "", desc, flags=re.DOTALL).strip()
-            descriptions.append(desc)
+            # llm_client already strips <think> blocks; remove any residual
+            desc = desc.strip()
+
+            if not desc:
+                logger.warning(
+                    "Empty description for frame %d (%s) — vision model returned no content",
+                    orig_idx + 1, path.split("/")[-1],
+                )
+                desc = f"(no description — frame {orig_idx + 1})"
+
+            prev_desc = desc
+
         except Exception as exc:
             logger.warning("Frame description failed for %s: %s", path, exc)
-            descriptions.append(f"(frame: {path.split('/')[-1]})")
+            desc = f"(frame: {path.split('/')[-1]})"
+            prev_desc = desc
 
+        results.append((orig_idx, desc))
+
+        # Emit progress every 5 frames so the UI stays updated
+        if run_dir and (len(results) % 5 == 0 or len(results) == len(segment)):
+            completed = orig_idx + 1
+            write_agent_state(
+                AGENT_FRAME_EXTRACTOR, STATUS_RUNNING,
+                output_summary=f"Describing frame {completed}/{total_frames}…",
+                run_dir=run_dir,
+            )
+
+    return results
+
+
+def _describe_frames(
+    frame_paths: List[str],
+    provider: str,
+    run_dir: str | None = None,
+) -> List[str]:
+    """
+    Describe each keyframe using vision with chained context.
+
+    When FRAME_DESCRIPTION_WORKERS > 1 the frame list is split into equal
+    segments processed in parallel, each with its own internal chain.
+    Workers > 1 trades cross-segment chain continuity for speed — useful
+    when using the OpenAI provider. Set to 1 (default) for LM Studio where
+    requests are serialised on a single GPU anyway (sequential = full chain).
+
+    Returns a list of one-line descriptions (one per frame).
+    """
+    if not frame_paths:
+        return []
+
+    paths_to_describe = frame_paths[:MAX_FRAMES_DESCRIBED]
+    total = len(paths_to_describe)
+    n_workers = max(1, FRAME_DESCRIPTION_WORKERS)
+
+    write_agent_state(
+        AGENT_FRAME_EXTRACTOR, STATUS_RUNNING,
+        output_summary=f"Describing frame 0/{total}…",
+        run_dir=run_dir,
+    )
+
+    # Split into n_workers segments (contiguous, for chain context within each)
+    segment_size = max(1, (total + n_workers - 1) // n_workers)
+    indexed = list(enumerate(paths_to_describe))
+    segments = [indexed[i:i + segment_size] for i in range(0, total, segment_size)]
+
+    all_results: list[tuple[int, str]] = []
+
+    if n_workers == 1:
+        # Sequential: full chain across all frames
+        all_results = _describe_segment(segments[0], provider, total, run_dir)
+    else:
+        # Parallel segments
+        with ThreadPoolExecutor(max_workers=n_workers) as pool:
+            futures = {
+                pool.submit(_describe_segment, seg, provider, total, run_dir): seg
+                for seg in segments
+            }
+            for future in as_completed(futures):
+                all_results.extend(future.result())
+
+    # Restore original order
+    all_results.sort(key=lambda x: x[0])
+    descriptions = [desc for _, desc in all_results]
+
+    # Placeholder labels for any frames beyond MAX_FRAMES_DESCRIBED
     if len(frame_paths) > MAX_FRAMES_DESCRIBED:
-        descriptions += [f"(frame {i+MAX_FRAMES_DESCRIBED+1})" for i in range(len(frame_paths) - MAX_FRAMES_DESCRIBED)]
+        descriptions += [
+            f"(frame {MAX_FRAMES_DESCRIBED + i + 1} — not described)"
+            for i in range(len(frame_paths) - MAX_FRAMES_DESCRIBED)
+        ]
 
     return descriptions
 
@@ -141,7 +229,7 @@ def _summarise_chunks(descriptions: List[str], provider: str) -> List[str]:
                     ),
                 }],
                 system=CHUNK_SUMMARY_SYSTEM,
-                max_tokens=400,
+                max_tokens=4000,
             )
             summaries.append(f"**Frames {start_label}–{end_label}:** {summary.strip()}")
         except Exception as exc:
@@ -180,7 +268,8 @@ def extract_frames_node(state: WorkflowState) -> dict:
         state["video_path"],
         run_dir=state.get("run_dir"),
     )
-    frame_descriptions = _describe_frames(frame_paths, state.get("provider", ""))
+    run_dir = state.get("run_dir")
+    frame_descriptions = _describe_frames(frame_paths, state.get("provider", ""), run_dir=run_dir)
     frame_chunk_summaries = _summarise_chunks(frame_descriptions, state.get("provider", ""))
 
     # Persist both individual descriptions and chunk summaries to frame_extractor/output.md

@@ -340,7 +340,7 @@ def run_research_agent(
     iteration: int = 0,
     provider: str = "",
     run_dir: str | None = None,
-) -> tuple[str, list[str]]:
+) -> tuple[str, list[str], list[str]]:
     """
     Run the researcher agent with optional alignment feedback.
 
